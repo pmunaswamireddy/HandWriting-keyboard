@@ -12,6 +12,7 @@ dependencies:
 
   # Utilities
   uuid: ^4.4.0
+  shared_preferences: ^2.3.2
 
   # State management
   flutter_riverpod: ^2.5.1

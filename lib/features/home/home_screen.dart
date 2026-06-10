@@ -14,7 +14,8 @@ import '../../core/models/glyph_map.dart';
 import '../../core/providers/profile_provider.dart';
 import '../../core/providers/glyph_provider.dart';
 import '../../shared/widgets/profile_avatar.dart';
-import '../glyph_editor/key_grid_screen.dart';
+import '../../shared/widgets/ime_setup_prompt.dart';
+import '../../core/services/ime_setup_service.dart';
 import 'package:characters/characters.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -204,15 +205,36 @@ class _ProfileSwitcherSheet extends ConsumerWidget {
 
 // ── Tabs ────────────────────────────────────────────────────
 
-class _KeyboardSetupTab extends ConsumerWidget {
+class _KeyboardSetupTab extends ConsumerStatefulWidget {
   const _KeyboardSetupTab();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_KeyboardSetupTab> createState() => _KeyboardSetupTabState();
+}
+
+class _KeyboardSetupTabState extends ConsumerState<_KeyboardSetupTab> {
+  bool _imeIsDefault = true; // assume true until checked
+  bool _imeChecked = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkImeStatus();
+  }
+
+  Future<void> _checkImeStatus() async {
+    final isDefault = await ImeSetupService.isImeDefault();
+    if (mounted) setState(() { _imeIsDefault = isDefault; _imeChecked = true; });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final activeProfile = ref.watch(activeProfileProvider);
     final glyphMapAsync = activeProfile != null
         ? ref.watch(glyphMapProvider(activeProfile.id))
         : null;
+    final dismissed = ref.watch(imePromptDismissedProvider).valueOrNull ?? false;
+    final showBanner = _imeChecked && !_imeIsDefault && !dismissed;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
@@ -220,6 +242,21 @@ class _KeyboardSetupTab extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(height: 8),
+
+          // ── IME Setup Banner (shows when keyboard is not default) ──
+          if (showBanner) ...[
+            _ImeSetupBanner(
+              onSetup: () async {
+                await maybeShowImeSetupPrompt(context, ref);
+                _checkImeStatus();
+              },
+              onDismiss: () {
+                ref.read(imePromptDismissedProvider.notifier).dismiss();
+              },
+            ),
+            SizedBox(height: 16),
+          ],
+
           // Completion card
           if (activeProfile != null && glyphMapAsync != null)
             glyphMapAsync.when(
@@ -235,7 +272,7 @@ class _KeyboardSetupTab extends ConsumerWidget {
               gradient: [Color(0xFFEC4899), Color(0xFFF43F5E)],
               title: 'Test Handwriting Keyboard',
               subtitle: 'Open the sandbox to test typing in your handwriting style',
-              onTap: () => _openSandbox(context, ref, activeProfile, glyphMapAsync?.valueOrNull),
+              onTap: () => _onTestKeyboardTap(context, ref, activeProfile, glyphMapAsync?.valueOrNull),
             ),
             SizedBox(height: 12),
           ],
@@ -283,8 +320,30 @@ class _KeyboardSetupTab extends ConsumerWidget {
     );
   }
 
-  void _openSandbox(BuildContext context, WidgetRef ref, Profile profile, GlyphMap? glyphMap) {
+  /// Called when user taps "Test Handwriting Keyboard" — the first moment
+  /// they actually want to TYPE. Show the IME setup prompt if not yet default,
+  /// then open the sandbox once they return.
+  Future<void> _onTestKeyboardTap(
+    BuildContext context,
+    WidgetRef ref,
+    Profile profile,
+    GlyphMap? glyphMap,
+  ) async {
     if (glyphMap == null) return;
+
+    final isDefault = await ImeSetupService.isImeDefault();
+    if (!isDefault && context.mounted) {
+      // Show IME setup prompt — user needs to set keyboard before typing
+      await maybeShowImeSetupPrompt(context, ref);
+      await _checkImeStatus();
+      return; // Let user set up first; they can tap again after
+    }
+
+    if (!context.mounted) return;
+    _openSandbox(context, profile, glyphMap);
+  }
+
+  void _openSandbox(BuildContext context, Profile profile, GlyphMap glyphMap) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -1035,4 +1094,106 @@ class _GlyphPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _GlyphPainter oldDelegate) =>
       oldDelegate.svgPath != svgPath || oldDelegate.color != color;
+}
+
+// ── IME Setup Banner ─────────────────────────────────────────────────────────
+
+/// Compact banner shown on the Setup tab when the keyboard is not set as default.
+/// Tapping "Set up" opens the full prompt sheet. X dismisses permanently.
+class _ImeSetupBanner extends StatelessWidget {
+  final VoidCallback onSetup;
+  final VoidCallback onDismiss;
+
+  const _ImeSetupBanner({required this.onSetup, required this.onDismiss});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onSetup,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              const Color(0xFF7C3AED).withValues(alpha: 0.18),
+              const Color(0xFFEC4899).withValues(alpha: 0.12),
+            ],
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: const Color(0xFF7C3AED).withValues(alpha: 0.4),
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF7C3AED), Color(0xFFEC4899)],
+                ),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(Icons.keyboard_rounded, color: Colors.white, size: 22),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Keyboard not set as default',
+                    style: GoogleFonts.outfit(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
+                  Text(
+                    'Tap to enable it in Android settings',
+                    style: GoogleFonts.outfit(
+                      fontSize: 12,
+                      color: Colors.white.withValues(alpha: 0.6),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            TextButton(
+              onPressed: onSetup,
+              style: TextButton.styleFrom(
+                backgroundColor: const Color(0xFF7C3AED),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: Text(
+                'Set up',
+                style: GoogleFonts.outfit(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+            GestureDetector(
+              onTap: onDismiss,
+              child: Icon(
+                Icons.close_rounded,
+                size: 18,
+                color: Colors.white.withValues(alpha: 0.4),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/providers/theme_provider.dart';
+import '../../core/services/ime_setup_service.dart';
+import '../../shared/widgets/ime_setup_prompt.dart';
 import 'font_install_screen.dart';
 import '../../core/theme/keyboard_themes.dart';
 import '../keyboard/keyboard_widget.dart';
@@ -23,6 +25,34 @@ class SettingsScreen extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── Keyboard Setup ──
+          _SectionHeader(title: 'Keyboard Setup'),
+          _SettingTile(
+            icon: Icons.keyboard_rounded,
+            title: 'Setup Handwriting Keyboard',
+            subtitle: 'Enable & set as default in Android settings',
+            trailing: Icon(Icons.arrow_forward_ios_rounded,
+                size: 15,
+                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4)),
+            onTap: () {
+              // Reset dismissed state so the prompt shows fresh
+              ref.read(imePromptDismissedProvider.notifier).reset();
+              Future.delayed(const Duration(milliseconds: 100), () {
+                if (context.mounted) maybeShowImeSetupPrompt(context, ref);
+              });
+            },
+          ),
+          _SettingTile(
+            icon: Icons.settings_rounded,
+            title: 'Android Keyboard Settings',
+            subtitle: 'Open system keyboard settings directly',
+            trailing: Icon(Icons.open_in_new_rounded,
+                size: 18,
+                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4)),
+            onTap: () => ImeSetupService.openImeSettings(),
+          ),
+          SizedBox(height: 24),
+
           // ── Display ──
           _SectionHeader(title: 'Display'),
           _SettingTile(

@@ -53,3 +53,9 @@ app.*.map.json
 
 # Scratch
 scratch/
+
+# Build outputs - distribute via GitHub Releases, not git
+*.apk
+*.aab
+build/
+
