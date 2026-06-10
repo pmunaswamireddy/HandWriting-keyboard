@@ -21,7 +21,7 @@ class HandwritingIMEService : InputMethodService() {
         keyboardView = HandwritingKeyboardView(this) { action -> handleKeyAction(action) }
         keyboardView.layoutParams = ViewGroup.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
-            dp(280)
+            dp(244)
         )
         return keyboardView
     }
@@ -80,6 +80,24 @@ class HandwritingKeyboardView(
     context: Context,
     private val onKey: (HandwritingIMEService.KeyAction) -> Unit
 ) : View(context) {
+
+    private fun dp(v: Float): Float {
+        return TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_DIP, v, resources.displayMetrics
+        )
+    }
+
+    private fun sp(v: Float): Float {
+        return TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_SP, v, resources.displayMetrics
+        )
+    }
+
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        val width = MeasureSpec.getSize(widthMeasureSpec)
+        val height = dp(244f).toInt()
+        setMeasuredDimension(width, height)
+    }
 
     // ── Colours ───────────────────────────────────────────────────────────────
     private val C_BG        = Color.parseColor("#0F0F0F")
@@ -175,13 +193,12 @@ class HandwritingKeyboardView(
 
     private fun buildLayout(W: Int, H: Int) {
         drawnKeys.clear()
-        val padX  = W * 0.008f
-        val padT  = H * 0.010f
-
-        // Row heights: toolbar 14%, keys 86% split into 4 rows
-        val tbH   = H * 0.140f
-        val keyH  = (H * 0.860f - padT * 5) / 4f
-        val gapV  = padT
+        
+        val gapV = dp(4f)
+        val gapH = dp(3f)
+        val tbH = dp(36f)
+        val keyH = dp(45f)
+        val padT = dp(4f)
 
         val rowTops = listOf(
             padT,                                       // toolbar
@@ -196,67 +213,74 @@ class HandwritingKeyboardView(
             val bottom = top + if (rowIdx == 0) tbH else keyH
 
             when (rowIdx) {
-                0 -> buildToolbar(keys, padX, top, bottom, W)
-                1 -> buildEvenRow(keys, padX, top, bottom, W, true)
-                2 -> buildAsdfRow(keys, padX, top, bottom, W)
-                3 -> buildShiftRow(keys, padX, top, bottom, W)
-                4 -> buildBottomRow(keys, padX, top, bottom, W)
+                0 -> buildToolbar(keys, gapH, top, bottom, W)
+                1 -> buildEvenRow(keys, gapH, top, bottom, W)
+                2 -> buildAsdfRow(keys, gapH, top, bottom, W)
+                3 -> buildShiftRow(keys, gapH, top, bottom, W)
+                4 -> buildBottomRow(keys, gapH, top, bottom, W)
             }
         }
     }
 
-    private fun buildToolbar(keys: List<KeyDef>, pad: Float, top: Float, bot: Float, W: Int) {
-        val btnW = W * 0.09f
-        val positions = listOf(pad, pad + btnW + pad, W - (btnW + pad) * 2, W - (btnW + pad))
+    private fun buildToolbar(keys: List<KeyDef>, gap: Float, top: Float, bot: Float, W: Int) {
+        val btnW = dp(36f)
+        val positions = listOf(
+            gap,
+            gap + btnW + gap,
+            W.toFloat() - (btnW + gap) * 2f,
+            W.toFloat() - (btnW + gap)
+        )
         keys.forEachIndexed { i, k ->
             val l = positions[i]
-            drawnKeys.add(DrawnKey(RectF(l, top + pad, l + btnW, bot - pad), k))
+            drawnKeys.add(DrawnKey(RectF(l, top, l + btnW, bot), k))
         }
     }
 
-    private fun buildEvenRow(keys: List<KeyDef>, pad: Float, top: Float, bot: Float, W: Int, hints: Boolean) {
+    private fun buildEvenRow(keys: List<KeyDef>, gap: Float, top: Float, bot: Float, W: Int) {
         val n    = keys.size
-        val keyW = (W - pad * (n + 1)) / n
+        val keyW = (W.toFloat() - gap * (n + 1)) / n
         keys.forEachIndexed { i, k ->
-            val l = pad + i * (keyW + pad)
+            val l = gap + i * (keyW + gap)
             drawnKeys.add(DrawnKey(RectF(l, top, l + keyW, bot), k))
         }
     }
 
-    private fun buildAsdfRow(keys: List<KeyDef>, pad: Float, top: Float, bot: Float, W: Int) {
-        // Centred row — 9 keys
-        val n    = keys.size
-        val keyW = (W - pad * (n + 1)) / (n + 0.5f)  // slightly smaller
-        val totalW = keyW * n + pad * (n - 1)
-        val startX = (W - totalW) / 2f
+    private fun buildAsdfRow(keys: List<KeyDef>, gap: Float, top: Float, bot: Float, W: Int) {
+        val qwertyKeyW = (W.toFloat() - gap * 11) / 10
+        val n = keys.size
+        val totalW = n * qwertyKeyW + (n - 1) * gap
+        val startX = (W.toFloat() - totalW) / 2f
         keys.forEachIndexed { i, k ->
-            val l = startX + i * (keyW + pad)
-            drawnKeys.add(DrawnKey(RectF(l, top, l + keyW, bot), k))
+            val l = startX + i * (qwertyKeyW + gap)
+            drawnKeys.add(DrawnKey(RectF(l, top, l + qwertyKeyW, bot), k))
         }
     }
 
-    private fun buildShiftRow(keys: List<KeyDef>, pad: Float, top: Float, bot: Float, W: Int) {
-        // shift(1.4×) | 7 letters | backspace(1.4×)
-        val n       = keys.size
-        val wideW   = (W - pad * (n + 1)) / (n + 0.8f) * 1.4f
-        val letterW = (W - pad * (n + 1) - wideW * 2) / (n - 2)
-        var x = pad
+    private fun buildShiftRow(keys: List<KeyDef>, gap: Float, top: Float, bot: Float, W: Int) {
+        val qwertyKeyW = (W.toFloat() - gap * 11) / 10
+        val n = keys.size
+        val lettersW = (n - 2) * qwertyKeyW
+        val gapCount = n + 1
+        val wideW = (W.toFloat() - gapCount * gap - lettersW) / 2f
+        
+        var x = gap
         keys.forEachIndexed { i, k ->
-            val kw = if (i == 0 || i == n - 1) wideW else letterW
+            val kw = if (i == 0 || i == n - 1) wideW else qwertyKeyW
             drawnKeys.add(DrawnKey(RectF(x, top, x + kw, bot), k))
-            x += kw + pad
+            x += kw + gap
         }
     }
 
-    private fun buildBottomRow(keys: List<KeyDef>, pad: Float, top: Float, bot: Float, W: Int) {
-        // ?123(1×)  ,(0.6×)  🌐(0.6×)  😊(0.6×)  SPACE(3×)  .(0.6×)  ↵(1×)
-        val unit = (W.toFloat() - pad * (keys.size + 1)) / 7.4f
-        val widths = listOf(unit, unit * 0.6f, unit * 0.6f, unit * 0.6f, unit * 3f, unit * 0.6f, unit)
-        var x = pad
+    private fun buildBottomRow(keys: List<KeyDef>, gap: Float, top: Float, bot: Float, W: Int) {
+        val weights = listOf(1.25f, 0.8f, 0.8f, 0.8f, 3.0f, 0.8f, 1.25f)
+        val totalWeight = weights.sum()
+        val unit = (W.toFloat() - gap * (keys.size + 1)) / totalWeight
+        
+        var x = gap
         keys.forEachIndexed { i, k ->
-            val kw = widths[i]
+            val kw = weights[i] * unit
             drawnKeys.add(DrawnKey(RectF(x, top, x + kw, bot), k))
-            x += kw + pad
+            x += kw + gap
         }
     }
 
@@ -269,17 +293,17 @@ class HandwritingKeyboardView(
         // Toolbar background
         drawnKeys.firstOrNull { it.def.type == KeyType.TOOLBAR }?.let { first ->
             bgP.color = C_TOOLBAR
-            canvas.drawRect(0f, 0f, width.toFloat(), first.rect.bottom + first.rect.height() * 0.3f, bgP)
+            canvas.drawRect(0f, 0f, width.toFloat(), first.rect.bottom + dp(2f), bgP)
         }
 
         val keyH = drawnKeys.filter { it.def.type != KeyType.TOOLBAR }
-            .map { it.rect.height() }.firstOrNull() ?: 48f
+            .map { it.rect.height() }.firstOrNull() ?: dp(45f)
 
         val mainFontSz = keyH * 0.42f
         val hintFontSz = keyH * 0.26f
         val subFontSz  = keyH * 0.30f
-        val CORNER     = keyH * 0.16f
-        val SHADOW     = keyH * 0.06f
+        val CORNER     = dp(5f)
+        val SHADOW     = dp(1.5f)
 
         drawnKeys.forEach { dk ->
             val r   = dk.def
@@ -341,6 +365,12 @@ class HandwritingKeyboardView(
                     textP.textSize = if (enterLabel.length > 1) mainFontSz * 0.72f else mainFontSz * 1.1f
                     textP.color = C_TEXT
                     canvas.drawText(enterLabel, cx, cy - (textP.descent() + textP.ascent()) / 2, textP)
+                }
+
+                r.primary == "?123" -> {
+                    textP.textSize = mainFontSz * 0.75f
+                    textP.color = C_TEXT
+                    canvas.drawText(r.primary, cx, cy - (textP.descent() + textP.ascent()) / 2, textP)
                 }
 
                 else -> {
