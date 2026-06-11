@@ -5,6 +5,7 @@ import android.util.TypedValue
 import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
+import io.flutter.FlutterInjector
 import io.flutter.embedding.android.FlutterView
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.FlutterEngineCache
@@ -32,9 +33,11 @@ class HandwritingIMEService : InputMethodService() {
             flutterEngine = cached
         } else {
             flutterEngine = FlutterEngine(this).also { engine ->
-                engine.dartExecutor.executeDartEntrypoint(
-                    DartExecutor.DartEntrypoint.createDefault()
+                val entrypoint = DartExecutor.DartEntrypoint(
+                    FlutterInjector.instance().flutterLoader().findAppBundlePath(),
+                    "imeMain"
                 )
+                engine.dartExecutor.executeDartEntrypoint(entrypoint)
                 FlutterEngineCache.getInstance().put(ENGINE_ID, engine)
             }
         }

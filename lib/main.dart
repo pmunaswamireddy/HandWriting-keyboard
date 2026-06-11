@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'app.dart';
 import 'core/database/app_database.dart';
+import 'core/providers/ime_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -102,5 +103,24 @@ void main() async {
         ),
       ),
     );
+  }
+}
+
+@pragma('vm:entry-point')
+void imeMain() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    final database = AppDatabase();
+    runApp(
+      ProviderScope(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(database),
+          isImeModeProvider.overrideWith((ref) => true),
+        ],
+        child: const HandwritingKeyboardApp(),
+      ),
+    );
+  } catch (e, stack) {
+    debugPrint('Error starting imeMain: $e\n$stack');
   }
 }
