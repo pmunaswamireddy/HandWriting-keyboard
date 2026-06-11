@@ -293,13 +293,9 @@ class _HandwritingKeyboardWidgetState
                     ),
                   );
                 }).toList(),
-                _ToolKey(
+                _BackspaceKey(
                   kbTheme: kbTheme,
-                  icon: Icons.backspace_outlined,
-                  onTap: () {
-                    HapticFeedback.selectionClick();
-                    widget.onBackspace();
-                  },
+                  onBackspace: widget.onBackspace,
                   flex: 3,
                 ),
               ],
@@ -406,7 +402,7 @@ class _SuggestionBarState extends ConsumerState<_SuggestionBar> {
         itemCount: _suggestions.length,
         itemBuilder: (context, index) {
           return GestureDetector(
-            onTap: () => widget.onSuggestionTap('\${_suggestions[index]} '),
+            onTap: () => widget.onSuggestionTap('${_suggestions[index]} '),
             child: Container(
               margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
               padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -538,10 +534,9 @@ class _BottomToolbar extends StatelessWidget {
             
             // Backspace key (only in symbol mode)
             if (showSymbols)
-              _ToolKey(
+              _BackspaceKey(
                 kbTheme: kbTheme,
-                icon: Icons.backspace_outlined,
-                onTap: onBackspace,
+                onBackspace: onBackspace,
                 flex: 2,
               ),
           ],
@@ -624,3 +619,68 @@ class _TextToolKey extends StatelessWidget {
 }
 
 // _EmojiPanel removed in favor of MediaPanel
+
+class _BackspaceKey extends StatefulWidget {
+  final KeyboardThemeData kbTheme;
+  final VoidCallback onBackspace;
+  final int flex;
+
+  const _BackspaceKey({
+    required this.kbTheme,
+    required this.onBackspace,
+    this.flex = 3,
+  });
+
+  @override
+  State<_BackspaceKey> createState() => _BackspaceKeyState();
+}
+
+class _BackspaceKeyState extends State<_BackspaceKey> {
+  Timer? _timer;
+
+  void _startRepeating() {
+    _timer?.cancel();
+    _timer = Timer(const Duration(milliseconds: 400), () {
+      _timer = Timer.periodic(const Duration(milliseconds: 60), (t) {
+        HapticFeedback.lightImpact();
+        widget.onBackspace();
+      });
+    });
+  }
+
+  void _stopRepeating() {
+    _timer?.cancel();
+    _timer = null;
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      flex: widget.flex,
+      child: GestureDetector(
+        onTapDown: (_) {
+          HapticFeedback.selectionClick();
+          widget.onBackspace();
+          _startRepeating();
+        },
+        onTapUp: (_) => _stopRepeating(),
+        onTapCancel: () => _stopRepeating(),
+        child: Container(
+          height: double.infinity,
+          margin: const EdgeInsets.symmetric(horizontal: 2.5, vertical: 2),
+          decoration: BoxDecoration(
+            color: widget.kbTheme.keyColor,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(Icons.backspace_outlined, color: widget.kbTheme.textColor, size: 18),
+        ),
+      ),
+    );
+  }
+}

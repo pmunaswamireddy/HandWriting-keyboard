@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/drift.dart';
+import 'dart:convert';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
 import '../database/app_database.dart';
 import '../models/glyph_map.dart';
 import 'profile_provider.dart';
@@ -73,5 +76,17 @@ class GlyphService {
         svgPath: entry.value,
       );
     }
+  }
+}
+
+Future<void> syncGlyphMapToNative(Map<String, String> glyphs) async {
+  try {
+    final dir = await getApplicationDocumentsDirectory();
+    final file = File('${dir.path}/active_profile_glyphs.json');
+    final jsonStr = jsonEncode(glyphs);
+    await file.writeAsString(jsonStr);
+    print("Synced ${glyphs.length} glyphs to native file: ${file.path}");
+  } catch (e) {
+    print("Error syncing glyphs to native: $e");
   }
 }

@@ -9,6 +9,8 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
+import java.io.File
+import org.json.JSONObject
 
 class HandwritingIMEService : InputMethodService() {
 
@@ -97,6 +99,57 @@ class HandwritingKeyboardView(
         val width = MeasureSpec.getSize(widthMeasureSpec)
         val height = dp(244f).toInt()
         setMeasuredDimension(width, height)
+    }
+
+    private var glyphs: Map<String, String> = emptyMap()
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var deleteRunnable: Runnable? = null
+
+    fun loadGlyphs() {
+        try {
+            val appFlutterDir = File(context.filesDir.parent, "app_flutter")
+            val file = File(appFlutterDir, "active_profile_glyphs.json")
+            if (file.exists()) {
+                val jsonStr = file.readText()
+                val jsonObj = JSONObject(jsonStr)
+                val newGlyphs = mutableMapOf<String, String>()
+                jsonObj.keys().forEach { key ->
+                    val value = jsonObj.optString(key)
+                    if (value != null) {
+                        newGlyphs[key] = value
+                    }
+                }
+                glyphs = newGlyphs
+                invalidate()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun startDeleteRepeat() {
+        stopDeleteRepeat()
+        val runnable = object : Runnable {
+            override fun run() {
+                onKey(HandwritingIMEService.KeyAction.Backspace)
+                performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
+                mainHandler.postDelayed(this, 60)
+            }
+        }
+        deleteRunnable = runnable
+        mainHandler.postDelayed(runnable, 400)
+    }
+
+    private fun stopDeleteRepeat() {
+        deleteRunnable?.let {
+            mainHandler.removeCallbacks(it)
+            deleteRunnable = null
+        }
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        loadGlyphs()
     }
 
     // ── Colours ───────────────────────────────────────────────────────────────
@@ -284,6 +337,74 @@ class HandwritingKeyboardView(
         }
     }
 
+    private fun parseAndDrawSvgPath(canvas: Canvas, svgPath: String, rect: RectF, paint: Paint) {
+        val glyphW = rect.width() * 0.5f
+        val glyphH = rect.height() * 0.5f
+        val glyphL = rect.centerX() - glyphW / 2f
+        val glyphT = rect.centerY() - glyphH / 2f
+        
+        val strokePaint = Paint(paint).apply {
+            strokeWidth = rect.height() / 11f
+            strokeCap = Paint.Cap.ROUND
+            strokeJoin = Paint.Join.ROUND
+            style = Paint.Style.STROKE
+        }
+
+        val strokes = svgPath.split("Z ")
+        for (stroke in strokes) {
+            val trimmed = stroke.trim()
+            if (trimmed.isEmpty()) continue
+            
+            val commands = trimmed.split(" ")
+            val pts = mutableListOf<PointF>()
+            
+            var i = 0
+            while (i < commands.size) {
+                val cmd = commands[i]
+                if ((cmd == "M" || cmd == "L") && i + 1 < commands.size) {
+                    val parts = commands[i + 1].split(",")
+                    if (parts.size == 2) {
+                        val x = parts[0].toFloatOrNull() ?: 0f
+                        val y = parts[1].toFloatOrNull() ?: 0f
+                        pts.add(PointF(x, y))
+                    }
+                    i++
+                }
+                i++
+            }
+            
+            if (pts.isEmpty()) continue
+            
+            val minX = pts.map { it.x }.minOrNull() ?: 0f
+            val maxX = pts.map { it.x }.maxOrNull() ?: 0f
+            val minY = pts.map { it.y }.minOrNull() ?: 0f
+            val maxY = pts.map { it.y }.maxOrNull() ?: 0f
+            val rx = maxX - minX
+            val ry = maxY - minY
+            if (rx == 0f || ry == 0f) continue
+            
+            val scale = minOf(glyphW / rx, glyphH / ry)
+            
+            val pathW = rx * scale
+            val pathH = ry * scale
+            val offsetX = glyphL + (glyphW - pathW) / 2f
+            val offsetY = glyphT + (glyphH - pathH) / 2f
+            
+            val path = Path()
+            for (idx in pts.indices) {
+                val p = pts[idx]
+                val px = (p.x - minX) * scale + offsetX
+                val py = (p.y - minY) * scale + offsetY
+                if (idx == 0) {
+                    path.moveTo(px, py)
+                } else {
+                    path.lineTo(px, py)
+                }
+            }
+            canvas.drawPath(path, strokePaint)
+        }
+    }
+
     // ── Draw ──────────────────────────────────────────────────────────────────
     override fun onDraw(canvas: Canvas) {
         // Background
@@ -377,11 +498,16 @@ class HandwritingKeyboardView(
                     val display = if (capsLock && r.primary.length == 1 && r.primary[0].isLetter())
                         r.primary.uppercase() else r.primary
 
-                    // Primary label
-                    textP.textSize = mainFontSz
-                    textP.color = C_TEXT
-                    val ty = cy - (textP.descent() + textP.ascent()) / 2
-                    canvas.drawText(display, cx, ty, textP)
+                    val pathStr = glyphs[display] ?: glyphs[display.lowercase()]
+                    if (pathStr != null && pathStr.isNotEmpty()) {
+                        parseAndDrawSvgPath(canvas, pathStr, rect, textP)
+                    } else {
+                        // Primary label
+                        textP.textSize = mainFontSz
+                        textP.color = C_TEXT
+                        val ty = cy - (textP.descent() + textP.ascent()) / 2
+                        canvas.drawText(display, cx, ty, textP)
+                    }
 
                     // Number/symbol hint (top-right corner)
                     if (r.hint.isNotEmpty()) {
@@ -414,19 +540,39 @@ class HandwritingKeyboardView(
     override fun onTouchEvent(event: MotionEvent): Boolean {
         val x = event.x; val y = event.y
         when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
+            MotionEvent.ACTION_DOWN -> {
+                val hit = drawnKeys.firstOrNull { it.rect.contains(x, y) }
                 drawnKeys.forEach { it.pressed = it.rect.contains(x, y) }
                 invalidate()
+                
+                if (hit != null && hit.def.type == KeyType.BACKSPACE) {
+                    fire(hit.def)
+                    startDeleteRepeat()
+                }
+            }
+            MotionEvent.ACTION_MOVE -> {
+                drawnKeys.forEach { it.pressed = it.rect.contains(x, y) }
+                invalidate()
+                
+                val hit = drawnKeys.firstOrNull { it.rect.contains(x, y) }
+                if (hit == null || hit.def.type != KeyType.BACKSPACE) {
+                    stopDeleteRepeat()
+                }
             }
             MotionEvent.ACTION_UP -> {
                 val hit = drawnKeys.firstOrNull { it.rect.contains(x, y) }
                 drawnKeys.forEach { it.pressed = false }
                 invalidate()
-                hit?.let { fire(it.def) }
+                stopDeleteRepeat()
+                
+                if (hit != null && hit.def.type != KeyType.BACKSPACE) {
+                    fire(hit.def)
+                }
             }
             MotionEvent.ACTION_CANCEL -> {
                 drawnKeys.forEach { it.pressed = false }
                 invalidate()
+                stopDeleteRepeat()
             }
         }
         return true

@@ -6,6 +6,7 @@ import 'core/providers/theme_provider.dart';
 import 'features/onboarding/onboarding_screen.dart';
 import 'features/home/home_screen.dart';
 import 'core/providers/profile_provider.dart';
+import 'core/providers/glyph_provider.dart';
 
 class HandwritingKeyboardApp extends ConsumerWidget {
   const HandwritingKeyboardApp({super.key});
@@ -14,6 +15,21 @@ class HandwritingKeyboardApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeModeProvider);
     final profilesAsync = ref.watch(profilesProvider);
+
+    // Sync active glyph map to native file whenever it changes
+    ref.listen<AsyncValue<GlyphMap>>(activeGlyphMapProvider, (previous, next) {
+      final glyphMap = next.valueOrNull;
+      if (glyphMap != null) {
+        syncGlyphMapToNative(glyphMap.glyphs);
+      }
+    });
+
+    // Also sync the initial value if already loaded
+    final activeGlyphMapAsync = ref.watch(activeGlyphMapProvider);
+    final activeGlyphMap = activeGlyphMapAsync.valueOrNull;
+    if (activeGlyphMap != null) {
+      Future.microtask(() => syncGlyphMapToNative(activeGlyphMap.glyphs));
+    }
 
     return MaterialApp(
       title: 'Handwriting Keyboard',
