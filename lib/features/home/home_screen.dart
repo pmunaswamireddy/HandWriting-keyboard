@@ -915,6 +915,14 @@ class _SandboxBottomSheetState extends State<_SandboxBottomSheet> {
               if (_text.isNotEmpty) setState(() => _text = _text.substring(0, _text.length - 1));
             },
             onEnter: () => setState(() => _text += '\n'),
+            onSuggestionTap: (suggestion, deleteLength) {
+              setState(() {
+                if (deleteLength > 0 && _text.length >= deleteLength) {
+                  _text = _text.substring(0, _text.length - deleteLength);
+                }
+                _text += suggestion;
+              });
+            },
           ),
         ],
       ),

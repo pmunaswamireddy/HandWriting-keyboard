@@ -22,6 +22,7 @@ class HandwritingKeyboardWidget extends ConsumerStatefulWidget {
   final VoidCallback onBackspace;
   final VoidCallback onEnter;
   final String currentText;
+  final Function(String, int)? onSuggestionTap;
 
   const HandwritingKeyboardWidget({
     super.key,
@@ -29,6 +30,7 @@ class HandwritingKeyboardWidget extends ConsumerStatefulWidget {
     required this.onBackspace,
     required this.onEnter,
     this.currentText = '',
+    this.onSuggestionTap,
   });
 
   @override
@@ -65,6 +67,12 @@ class _HandwritingKeyboardWidgetState
     ['-','_','=','+','[',']','{','}','|','\\'],
     [';',':','\'','"',',','.','<','>','/','?'],
   ];
+
+  String _lastWord(String text) {
+    final RegExp wordRegex = RegExp(r"[a-zA-Z0-9\']+$");
+    final match = wordRegex.firstMatch(text);
+    return match != null ? match.group(0) ?? '' : '';
+  }
 
   String _applyShift(String char) {
     if (_isShifted || _isCapsLock) return char.toUpperCase();
@@ -161,7 +169,18 @@ class _HandwritingKeyboardWidgetState
             ),
 
           // ── Suggestion bar ──
-          _SuggestionBar(kbTheme: kbTheme, currentText: widget.currentText, onSuggestionTap: widget.onTextInput),
+          _SuggestionBar(
+            kbTheme: kbTheme,
+            currentText: widget.currentText,
+            onSuggestionTap: (suggestion) {
+              if (widget.onSuggestionTap != null) {
+                final last = _lastWord(widget.currentText);
+                widget.onSuggestionTap!(suggestion, last.length);
+              } else {
+                widget.onTextInput(suggestion);
+              }
+            },
+          ),
 
           // ── Keyboard rows ──
           Expanded(

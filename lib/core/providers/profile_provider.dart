@@ -22,7 +22,34 @@ final profilesProvider = StreamProvider<List<Profile>>((ref) {
       );
 });
 
-final activeProfileIdProvider = StateProvider<String?>((ref) => null);
+class ActiveProfileIdNotifier extends StateNotifier<String?> {
+  final AppDatabase _db;
+
+  ActiveProfileIdNotifier(this._db) : super(null) {
+    _load();
+  }
+
+  Future<void> _load() async {
+    final saved = await _db.getSetting('active_profile_id');
+    if (saved != null && saved.isNotEmpty) {
+      state = saved;
+    }
+  }
+
+  Future<void> setActiveProfile(String? id) async {
+    state = id;
+    if (id != null) {
+      await _db.setSetting('active_profile_id', id);
+    } else {
+      await _db.setSetting('active_profile_id', '');
+    }
+  }
+}
+
+final activeProfileIdProvider =
+    StateNotifierProvider<ActiveProfileIdNotifier, String?>((ref) {
+  return ActiveProfileIdNotifier(ref.watch(appDatabaseProvider));
+});
 
 final activeProfileProvider = Provider<Profile?>((ref) {
   final id = ref.watch(activeProfileIdProvider);
@@ -80,6 +107,6 @@ class ProfileService {
   }
 
   void setActiveProfile(String? id) {
-    _ref.read(activeProfileIdProvider.notifier).state = id;
+    _ref.read(activeProfileIdProvider.notifier).setActiveProfile(id);
   }
 }
