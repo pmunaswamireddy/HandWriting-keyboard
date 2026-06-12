@@ -11,6 +11,7 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.FlutterEngineCache
 import io.flutter.embedding.engine.dart.DartExecutor
 import io.flutter.plugin.common.MethodChannel
+import io.flutter.plugins.GeneratedPluginRegistrant
 
 class HandwritingIMEService : InputMethodService() {
 
@@ -42,6 +43,7 @@ class HandwritingIMEService : InputMethodService() {
                     loader.findAppBundlePath(),
                     "imeMain"
                 )
+                GeneratedPluginRegistrant.registerWith(engine)
                 engine.dartExecutor.executeDartEntrypoint(entrypoint)
                 FlutterEngineCache.getInstance().put(ENGINE_ID, engine)
             }
