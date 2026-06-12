@@ -32,9 +32,14 @@ class HandwritingIMEService : InputMethodService() {
         if (cached != null) {
             flutterEngine = cached
         } else {
+            val loader = FlutterInjector.instance().flutterLoader()
+            if (!loader.initialized()) {
+                loader.startInitialization(applicationContext)
+                loader.ensureInitializationComplete(applicationContext, null)
+            }
             flutterEngine = FlutterEngine(this).also { engine ->
                 val entrypoint = DartExecutor.DartEntrypoint(
-                    FlutterInjector.instance().flutterLoader().findAppBundlePath(),
+                    loader.findAppBundlePath(),
                     "imeMain"
                 )
                 engine.dartExecutor.executeDartEntrypoint(entrypoint)
