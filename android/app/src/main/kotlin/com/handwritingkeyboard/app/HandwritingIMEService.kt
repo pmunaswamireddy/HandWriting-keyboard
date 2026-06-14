@@ -4,6 +4,7 @@ import android.inputmethodservice.InputMethodService
 import android.util.TypedValue
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.view.inputmethod.EditorInfo
 import io.flutter.FlutterInjector
 import io.flutter.embedding.android.FlutterView
@@ -22,6 +23,7 @@ class HandwritingIMEService : InputMethodService() {
 
     private var flutterEngine: FlutterEngine? = null
     private var methodChannel: MethodChannel? = null
+    private var flutterView: FlutterView? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -122,25 +124,55 @@ class HandwritingIMEService : InputMethodService() {
 
     override fun onCreateInputView(): View {
         val engine = flutterEngine ?: return View(this)
-        val flutterView = FlutterView(this)
-        flutterView.attachToFlutterEngine(engine)
-        flutterView.layoutParams = ViewGroup.LayoutParams(
+        
+        // Detach old view from engine if any
+        flutterView?.detachFromFlutterEngine()
+
+        val container = FrameLayout(this).apply {
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(300)
+            )
+        }
+
+        val newView = FlutterView(this)
+        newView.attachToFlutterEngine(engine)
+        newView.layoutParams = FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             dp(300)
         )
+
+        container.addView(newView)
+        flutterView = newView
+
         methodChannel?.invokeMethod("setImeMode", mapOf("isIme" to true))
+        engine.lifecycleChannel.appIsResumed()
+
         android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
             sendCurrentTextToDart()
         }, 150)
-        return flutterView
+        return container
     }
 
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
+        flutterEngine?.lifecycleChannel?.appIsResumed()
         methodChannel?.invokeMethod("setImeMode", mapOf("isIme" to true))
         android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
             sendCurrentTextToDart()
         }, 100)
+    }
+
+    override fun onFinishInputView(finishingInput: Boolean) {
+        super.onFinishInputView(finishingInput)
+        flutterEngine?.lifecycleChannel?.appIsPaused()
+    }
+
+    override fun onDestroy() {
+        flutterView?.detachFromFlutterEngine()
+        flutterView = null
+        flutterEngine?.lifecycleChannel?.appIsDetached()
+        super.onDestroy()
     }
 
     private fun dp(v: Int) = TypedValue.applyDimension(

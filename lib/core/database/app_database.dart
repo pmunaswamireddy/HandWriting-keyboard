@@ -52,6 +52,14 @@ class AppDatabase extends _$AppDatabase {
   @override
   int get schemaVersion => 1;
 
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+        beforeOpen: (details) async {
+          await customStatement('PRAGMA journal_mode = WAL;');
+          await customStatement('PRAGMA busy_timeout = 5000;');
+        },
+      );
+
   // ── Profiles ──
 
   Future<List<Profile>> getAllProfiles() =>

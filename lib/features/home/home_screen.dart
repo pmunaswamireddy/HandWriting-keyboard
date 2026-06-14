@@ -1,7 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../profile_manager/profile_list_screen.dart';
 import '../glyph_editor/key_grid_screen.dart';
@@ -27,12 +29,112 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   int _selectedIndex = 0;
+  String? _imeErrorLog;
 
   final _pages = const [
     _KeyboardSetupTab(),
     _ProfilesTab(),
     _SettingsTab(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _checkImeErrorLog();
+  }
+
+  Future<void> _checkImeErrorLog() async {
+    try {
+      final dir = await getApplicationSupportDirectory();
+      final file = File('${dir.path}/ime_error.txt');
+      if (await file.exists()) {
+        final content = await file.readAsString();
+        setState(() {
+          _imeErrorLog = content;
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _clearImeErrorLog() async {
+    try {
+      final dir = await getApplicationSupportDirectory();
+      final file = File('${dir.path}/ime_error.txt');
+      if (await file.exists()) {
+        await file.delete();
+      }
+      setState(() {
+        _imeErrorLog = null;
+      });
+    } catch (_) {}
+  }
+
+  Widget _buildErrorBanner() {
+    return Container(
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF330000),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.redAccent.withOpacity(0.5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 24),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'IME Keyboard Error Logged',
+                  style: GoogleFonts.outfit(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.redAccent,
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close, color: Colors.white60, size: 20),
+                onPressed: _clearImeErrorLog,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Container(
+            constraints: const BoxConstraints(maxHeight: 120),
+            width: double.infinity,
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.black26,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: SingleChildScrollView(
+              child: Text(
+                _imeErrorLog!,
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: Colors.white70,
+                  fontFamily: 'monospace',
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+            ),
+            icon: const Icon(Icons.delete_outline, size: 16),
+            label: const Text('Clear Error Log'),
+            onPressed: _clearImeErrorLog,
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -44,6 +146,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         children: [
           // ── Header ──
           _HomeHeader(activeProfile: activeProfile),
+          if (_imeErrorLog != null) _buildErrorBanner(),
           // ── Body ──
           Expanded(child: _pages[_selectedIndex]),
         ],
